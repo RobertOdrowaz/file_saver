@@ -8,8 +8,8 @@ import 'package:file_saver/src/utils/helpers.dart';
 import 'package:file_saver/src/utils/mime_types.dart';
 import 'package:flutter/foundation.dart';
 
-export 'package:file_saver/src/utils/mime_types.dart';
 export 'package:file_saver/src/models/link_details.dart';
+export 'package:file_saver/src/utils/mime_types.dart';
 
 class FileSaver {
   final String _somethingWentWrong =
@@ -54,28 +54,58 @@ class FileSaver {
       String? filePath,
       LinkDetails? link,
       String ext = '',
-      MimeType mimeType = MimeType.other}) async {
-    bytes = bytes ??
-        await Helpers.getBytes(file: file, filePath: filePath, link: link);
+      MimeType mimeType = MimeType.other,
+      String? customMimeType}) async {
+    assert(mimeType != MimeType.custom || customMimeType != null,
+        'customMimeType is required when mimeType is MimeType.custom');
 
     String extension = Helpers.getExtension(extension: ext);
+    final isFile = file != null || filePath != null;
+    if (!isFile) {
+      bytes = bytes ??
+          await Helpers.getBytes(file: file, filePath: filePath, link: link);
+    }
     try {
-      _saver = Saver(
-        fileModel: FileModel(
-          name: name,
-          bytes: bytes,
-          ext: extension,
-          mimeType: mimeType.type,
-        ),
-      );
-      directory = await _saver.save() ?? _somethingWentWrong;
+      if (isFile) {
+        directory = await saveFileOnly(
+              name: name,
+              file: file ?? File(filePath!),
+              ext: extension,
+              mimeType: mimeType,
+            ) ??
+            _somethingWentWrong;
+      } else {
+        _saver = Saver(
+            fileModel: FileModel(
+                name: name,
+                bytes: bytes!,
+                ext: extension,
+                mimeType:
+                    mimeType.type.isEmpty ? customMimeType! : mimeType.type));
+        directory = await _saver.save() ?? _somethingWentWrong;
+      }
       return directory;
     } catch (e) {
       return directory;
     }
   }
 
-  ///[saveAs] This method will open a Save As File dialog where user can select the location for saving file.
+  Future<String?> saveFileOnly(
+      {required String name,
+      required File file,
+      String ext = '',
+      MimeType mimeType = MimeType.other,
+      String? customMimeType}) async {
+    try {
+      final applicationDirectory = await Helpers.getDirectory();
+
+      return (await file.copy('$applicationDirectory/$name$ext')).path;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// [saveAs] This method will open a Save As File dialog where user can select the location for saving file.
   ///
   /// [name]: Name of your file.
   ///
@@ -100,26 +130,28 @@ class FileSaver {
   ///
   /// mimeType (Mainly required for web): MimeType from enum MimeType..
   ///
-  /// More Mimetypes will be added in future
-  Future<String?> saveAs(
-      {required String name,
-      Uint8List? bytes,
-      File? file,
-      String? filePath,
-      LinkDetails? link,
-      required String ext,
-      required MimeType mimeType}) async {
+  Future<String?> saveAs({
+    required String name,
+    Uint8List? bytes,
+    File? file,
+    String? filePath,
+    LinkDetails? link,
+    required String ext,
+    required MimeType mimeType,
+    String? customMimeType,
+  }) async {
+    assert(mimeType != MimeType.custom || customMimeType != null,
+        'customMimeType is required when mimeType is MimeType.custom');
     bytes = bytes ??
         await Helpers.getBytes(file: file, filePath: filePath, link: link);
 
     _saver = Saver(
-      fileModel: FileModel(
-        name: name,
-        bytes: bytes,
-        ext: ext,
-        mimeType: mimeType.type,
-      ),
-    );
+        fileModel: FileModel(
+            name: name,
+            bytes: bytes,
+            ext: ext,
+            mimeType:
+                mimeType == MimeType.custom ? customMimeType! : mimeType.type));
     String? path = await _saver.saveAs();
     return path;
   }
